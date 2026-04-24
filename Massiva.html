@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel de Controle CTO</title>
+    <style>
+        :root { 
+            --danger: #d32f2f; 
+            --warning: #f57c00;
+            --success: #388e3c; 
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+        }
+        
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text-main); margin: 20px; }
+        .container { max-width: 1200px; margin: auto; }
+        
+        textarea { 
+            width: 100%; height: 80px; background: #fff; border: 2px solid #dee2e6; 
+            border-radius: 8px; padding: 10px; color: #333; margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        button { 
+            background: #0056b3; color: white; border: none; padding: 14px; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; 
+            font-size: 1.1em; transition: 0.2s;
+        }
+        button:hover { background: #004494; }
+
+        .cto-grid { 
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
+            gap: 20px; margin-top: 25px; 
+        }
+
+        .cto-card { 
+            background: var(--card-bg); border: 1px solid #dee2e6; border-radius: 12px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        .cto-card.has-offline { 
+            border: 2px solid var(--danger);
+            animation: pulse-shadow 2s infinite;
+        }
+
+        @keyframes pulse-shadow {
+            0% { box-shadow: 0 0 5px rgba(211, 47, 47, 0.2); }
+            50% { box-shadow: 0 0 15px rgba(211, 47, 47, 0.4); }
+            100% { box-shadow: 0 0 5px rgba(211, 47, 47, 0.2); }
+        }
+
+        .cto-header { 
+            padding: 15px; display: flex; justify-content: space-between; 
+            align-items: center; border-bottom: 1px solid #eee;
+            background: #fdfdfd;
+        }
+
+        .cto-label { font-weight: 800; font-size: 1.1em; color: #1a237e; }
+        
+        .counter-badge {
+            font-size: 0.85em; font-weight: bold; padding: 4px 12px; border-radius: 20px;
+        }
+        .badge-danger { background: #ffebee; color: var(--danger); border: 1px solid var(--danger); }
+        .badge-success { background: #e8f5e9; color: var(--success); border: 1px solid var(--success); }
+
+        .client-item { 
+            padding: 10px 15px; border-bottom: 1px solid #f8f9fa; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .client-info { display: flex; flex-direction: column; }
+        .client-name { font-size: 0.9em; text-transform: uppercase; font-weight: 600; color: #444; }
+        .client-port { font-size: 0.75em; color: #999; font-weight: bold; }
+
+        .status-text { font-size: 0.8em; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+        .los { color: var(--danger); background: #fff5f5; }
+        .dg { color: var(--warning); background: #fff8f1; }
+        .on { color: var(--success); }
+
+        .empty-msg { text-align: center; grid-column: 1/-1; padding: 50px; color: #999; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align: center;">Monitor de Clientes por CTO</h2>
+    <textarea id="dataInput" placeholder="Cole o dump aqui..."></textarea>
+    <button onclick="processar()">ANALISAR STATUS DA REDE</button>
+
+    <div id="ctoGrid" class="cto-grid">
+        <div class="empty-msg">Cole os dados acima para gerar os cards das CTOs.</div>
+    </div>
+</div>
+
+<script>
+function processar() {
+    const input = document.getElementById('dataInput').value;
+    const grid = document.getElementById('ctoGrid');
+    grid.innerHTML = '';
+
+    const linhas = input.split('\n');
+    const ctos = {};
+
+    linhas.forEach(linha => {
+        if (!linha.trim() || !linha.includes('AnOnuInfo')) return;
+
+        // Pega o "token" onde fica o nome+CTO+Porta e o Status
+        const regex = /\d+\s+([^\s]+)\s+(Online|LOS|Dying Gasp)/i;
+        const match = linha.match(regex);
+
+        if (match) {
+            const token = match[1]; // Ex: gabrielristoff266525C170P ou leandroatz
+            const status = match[2];
+
+            // Procura por C + números e P (com ou sem números) no final da palavra
+            const matchFim = token.match(/(C\d+)(P\d*)?$/i);
+
+            let ctoID = "S/ CTO";
+            let porta = "P--";
+            let nomeBruto = token;
+
+            if (matchFim) {
+                ctoID = matchFim[1].toUpperCase();
+                
+                // Se o P existe mas não tem número (ex: "P" do Gabriel), define como P--
+                if (matchFim[2]) {
+                    porta = matchFim[2].toUpperCase() === "P" ? "P--" : matchFim[2].toUpperCase();
+                }
+                
+                // Retira a parte da CTO/Porta do nome para limpar
+                nomeBruto = token.replace(matchFim[0], '');
+            }
+
+            const nomeLimpo = nomeBruto.replace(/\d+|_/g, ' ').trim();
+
+            if (!ctos[ctoID]) {
+                ctos[ctoID] = { total: 0, off: 0, clientes: [] };
+            }
+
+            ctos[ctoID].total++;
+            if (status !== 'Online') ctos[ctoID].off++;
+            
+            ctos[ctoID].clientes.push({ nome: nomeLimpo, porta: porta, status: status });
+        }
+    });
+
+    const ctosOrdenadas = Object.entries(ctos).sort((a, b) => {
+        // As caixas "S/ CTO" vão pro final, o resto é ordenado por quantidade de OFF
+        if (a[0] === "S/ CTO") return 1;
+        if (b[0] === "S/ CTO") return -1;
+        return b[1].off - a[1].off;
+    });
+
+    if (ctosOrdenadas.length === 0) {
+        grid.innerHTML = '<div class="empty-msg">Nenhum dado válido identificado no texto colado.</div>';
+        return;
+    }
+
+    ctosOrdenadas.forEach(([id, dados]) => {
+        const temOffline = dados.off > 0;
+        const card = document.createElement('div');
+        card.className = `cto-card ${temOffline ? 'has-offline' : ''}`;
+        
+        const badgeClass = temOffline ? 'badge-danger' : 'badge-success';
+        const badgeText = `${dados.off} de ${dados.total} OFF`;
+
+        card.innerHTML = `
+            <div class="cto-header">
+                <span class="cto-label">${id !== 'S/ CTO' ? 'CTO ' + id.replace('C','') : id}</span>
+                <span class="counter-badge ${badgeClass}">${badgeText}</span>
+            </div>
+            <div style="flex-grow: 1;">
+                ${dados.clientes.map(c => `
+                    <div class="client-item">
+                        <div class="client-info">
+                            <span class="client-name">${c.nome}</span>
+                            <span class="client-port">${c.porta}</span>
+                        </div>
+                        <span class="status-text ${getClass(c.status)}">${c.status === 'Online' ? 'ON' : c.status}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function getClass(s) {
+    if (s === 'LOS') return 'los';
+    if (s.includes('Dying')) return 'dg';
+    return 'on';
+}
+</script>
+
+</body>
+</html>
